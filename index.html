@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Analyzer</title>
+
+    <!-- Bootstrap CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 700px;
+            margin-top: 50px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-custom {
+            background-color: #007bff;
+            color: white;
+            width: 100%;
+        }
+        
+        .result-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feedback-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+        }
+        
+        .feedback-section h5 {
+            color: #721c24;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2 class="text-center"><i class="fas fa-file-alt"></i> Smart Resume Analyzer</h2>
+
+        <form id="resumeForm" enctype="multipart/form-data" novalidate>
+            <div class="mb-3">
+                <label for="job_role" class="form-label"><strong>Select Job Role:</strong></label>
+                <select id="job_role" name="job_role" class="form-select" required>
+                    <option value="">Select a job role</option>
+                    {% for role in job_roles %}
+                    <option value="{{ role }}">{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="resume" class="form-label"><strong>Upload Resume (PDF):</strong></label>
+                <input type="file" id="resume" name="resume" accept=".pdf" class="form-control" required>
+            </div>
+
+            <button type="submit" class="btn btn-custom"><i class="fas fa-upload"></i> Analyze Resume</button>
+        </form>
+
+        <!-- Loading state -->
+        <div id="loading" class="loading">
+            <p><i class="fas fa-spinner fa-spin"></i> Analyzing...</p>
+        </div>
+    </div>
+
+    <!-- Results container -->
+    <div class="container result-container" id="result" style="display: none;">
+        <!-- Results will be dynamically inserted here -->
+    </div>
+
+    <script>
+        $(document).ready(function() {
+                    // Handle form submission
+                    $("#resumeForm").submit(function(event) {
+                                event.preventDefault();
+
+                                const file = $("#resume")[0].files[0];
+                                const jobRole = $("#job_role").val();
+
+                                if (!file || !jobRole) {
+                                    alert("Please upload a resume and select a job role.");
+                                    return;
+                                }
+
+                                if (file.type !== "application/pdf") {
+                                    alert("Only PDF files are allowed.");
+                                    return;
+                                }
+
+                                var formData = new FormData();
+                                formData.append("job_role", jobRole);
+                                formData.append("resume", file);
+
+                                // Show loading state
+                                $("#loading").show();
+                                $(".btn-custom").prop("disabled", true).text("Analyzing...");
+
+                                $.ajax({
+                                            url: "/analyze",
+                                            type: "POST",
+                                            data: formData,
+                                            processData: false,
+                                            contentType: false,
+                                            success: function(response) {
+                                                    $("#loading").hide();
+                                                    $(".btn-custom").prop("disabled", false).html('<i class="fas fa-upload"></i> Analyze Resume');
+                                                    $("#result").hide().html("");
+
+                                                    // Display Results
+                                                    let html = `
+                            <h3 class="text-center"><i class="fas fa-check-circle text-success"></i> Results</h3>
+                            <p><strong>Applied For:</strong> ${response.job_role}</p>
+                            <p><strong>ATS Score:</strong> <span class="badge bg-success">${response.ats_score}% Match</span>
+                        `;
+
+                                                    // Display Skills Found
+                                                    if (response.skills_found && response.skills_found.length) {
+                                                        html += `
+                                <h5><i class="fas fa-tools"></i> Skills Found:</h5>
+                                <p>${response.skills_found.map(skill => `<span class="badge bg-primary">${skill}</span>`).join(" ")}</p>
+                            `;
+                        }
+
+                        // Display Extracted Skills
+                        if (response.skills_extracted && response.skills_extracted.length) {
+                            html += `
+                                <h5><i class="fas fa-lightbulb"></i> All Extracted Skills:</h5>
+                                <p>${response.skills_extracted.map(skill => `<span class="badge bg-secondary">${skill}</span>`).join(" ")}</p>
+                            `;
+                        }
+
+                        // Display Experience
+                        if (response.experience && response.experience.length) {
+                            html += `
+                                <h5><i class="fas fa-briefcase"></i> Experience:</h5>
+                                <ul class="list-group">
+                                    ${response.experience.map(e => `<li class="list-group-item">${e}</li>`).join("")}
+                                </ul>
+                            `;
+                        }
+
+                        // Display Projects
+                        if (response.projects && response.projects.length) {
+                            html += `
+                                <h5><i class="fas fa-project-diagram"></i> Projects:</h5>
+                                <ul class="list-group">
+                                    ${response.projects.map(p => `<li class="list-group-item">${p}</li>`).join("")}
+                                </ul>
+                            `;
+                        }
+
+                        $("#result").html(html).fadeIn();
+
+                        // Display ATS Feedback
+                        if (response.ats_feedback) {
+                            $("#result").append(`
+                                <div class="feedback-section">
+                                    <h5><i class="fas fa-comment-dots"></i> ATS Feedback:</h5>
+                                    <p>${response.ats_feedback}</p>
+                                </div>
+                            `);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("Error: " + error);
+                        alert("Something went wrong while analyzing. Please try again.");
+                        $(".btn-custom").prop("disabled", false).html('<i class="fas fa-upload"></i> Analyze Resume');
+                        $("#loading").hide();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
